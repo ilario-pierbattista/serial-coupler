@@ -1,0 +1,32 @@
+{
+  "name": "serial-coupler",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "npm run build:live",
+    "build:live": "nodemon --exec ./node_modules/.bin/ts-node -- ./index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^7.0.5",
+    "nodemon": "^1.11.0",
+    "ts-node": "^2.1.0",
+    "typescript": "^2.1.6"
+  },
+  "dependencies": {
+    "@types/es6-promise": "0.0.32",
+    "@types/inquirer": "0.0.32",
+    "command-line-args": "^4.0.1",
+    "command-line-usage": "^4.0.0",
+    "hex": "^0.1.0",
+    "inquirer": "^3.0.1",
+    "prompt": "^1.0.0",
+    "select-prompt": "^0.3.1",
+    "semaphore": "^1.0.5",
+    "serialport": "^4.0.7",
+    "typescript-promises": "^0.1.3"
+  }
+}
