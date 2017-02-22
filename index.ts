@@ -89,13 +89,13 @@ class Main {
             }
 
             this.createCoupler(config)
-            .then((c:Coupler) => {
-                this.coupler = c;
-                this.coupler.begin();
-            })
-            .catch((err:Error) => {
-                console.log(`Error: ${err.message}`)
-            })
+                .then((c: Coupler) => {
+                    this.coupler = c;
+                    this.coupler.begin();
+                })
+                .catch((err: Error) => {
+                    console.log(`Error: ${err.message}`)
+                })
         }
     }
 
@@ -194,6 +194,7 @@ interface SerialPortLib {
     on(event: String, callback: Function)
     open(callback: Function)
     write(buffer: Buffer)
+    flush(cb: (err: Error) => any)
 }
 
 class SerialPort {
@@ -202,14 +203,20 @@ class SerialPort {
     constructor(public name: String, public baudrate: Number) {
         this.serial = new serialport(name, {
             baudRate: baudrate,
-            autoOpen: false
+            autoOpen: false,
+            parser: serialport.parsers.byteDelimiter([13,10])
         });
     }
 
     public open() {
         this.serial.open(function (err: Error) {
             if (err) console.log(`Error: ${err.message}`);
-        })
+        });
+        this.serial.on('open', () => {
+            this.serial.flush((err: Error) => {
+                if (err) console.log(`Error: ${err.message}`)
+            });
+        });
     }
 
     public onData(callback: Function) {
@@ -241,8 +248,8 @@ class Coupler {
         this.serialB.open();
     }
 
-    private dumpAndRedirect(input:SerialPort, output:SerialPort):(data:string) => void {
-        return (data:string) => {
+    private dumpAndRedirect(input: SerialPort, output: SerialPort): (data: string) => void {
+        return (data: string) => {
             var buffer = new Buffer(data);
             var time = new Date();
             output.write(buffer);

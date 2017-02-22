@@ -184,13 +184,21 @@ var SerialPort = (function () {
         this.baudrate = baudrate;
         this.serial = new serialport(name, {
             baudRate: baudrate,
-            autoOpen: false
+            autoOpen: false,
+            parser: serialport.parsers.byteDelimiter([13, 10])
         });
     }
     SerialPort.prototype.open = function () {
+        var _this = this;
         this.serial.open(function (err) {
             if (err)
                 console.log("Error: " + err.message);
+        });
+        this.serial.on('open', function () {
+            _this.serial.flush(function (err) {
+                if (err)
+                    console.log("Error: " + err.message);
+            });
         });
     };
     SerialPort.prototype.onData = function (callback) {
