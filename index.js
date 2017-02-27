@@ -179,14 +179,25 @@ var CouplerConfig = (function () {
     return CouplerConfig;
 })();
 var SerialPort = (function () {
-    function SerialPort(name, baudrate) {
+    function SerialPort(name, baudrate, delay) {
+        var _this = this;
+        if (delay === void 0) { delay = 5; }
         this.name = name;
         this.baudrate = baudrate;
+        this.delay = delay;
+        this.timeoutHandler = function () {
+            var time = new Date();
+            console.log("\n" + time.toISOString() + " [" + _this.name + "]:");
+            hex(_this.buffer);
+            _this.buffer = new Buffer('');
+            _this.bufferLock = false;
+        };
         this.serial = new serialport(name, {
             baudRate: baudrate,
             autoOpen: false,
-            parser: serialport.parsers.byteDelimiter([13, 10])
+            lock: false
         });
+        this.buffer = new Buffer('');
     }
     SerialPort.prototype.open = function () {
         var _this = this;
@@ -207,6 +218,16 @@ var SerialPort = (function () {
     SerialPort.prototype.write = function (buffer) {
         this.serial.write(buffer);
     };
+    SerialPort.prototype.logData = function (data) {
+        if (this.bufferLock) {
+            clearTimeout(this.timeout);
+        }
+        else {
+            this.bufferLock = true;
+        }
+        this.buffer = Buffer.concat([this.buffer, data]);
+        this.timeout = setTimeout(this.timeoutHandler, this.delay);
+    };
     return SerialPort;
 })();
 var Coupler = (function () {
@@ -225,10 +246,11 @@ var Coupler = (function () {
     Coupler.prototype.dumpAndRedirect = function (input, output) {
         return function (data) {
             var buffer = new Buffer(data);
-            var time = new Date();
+            // var time = new Date();
             output.write(buffer);
-            console.log("\n" + time.toISOString() + " [" + input.name + "]:");
-            hex(buffer);
+            // console.log(`\n${time.toISOString()} [${input.name}]:`);
+            // hex(buffer);            
+            input.logData(buffer);
         };
     };
     Coupler.isConfigValid = function (config) {

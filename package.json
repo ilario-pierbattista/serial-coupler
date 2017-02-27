@@ -19,6 +19,7 @@
   "dependencies": {
     "@types/es6-promise": "0.0.32",
     "@types/inquirer": "0.0.32",
+    "@types/serialport": "^4.0.7",
     "command-line-args": "^4.0.1",
     "command-line-usage": "^4.0.0",
     "hex": "^0.1.0",

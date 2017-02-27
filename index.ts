@@ -184,9 +184,9 @@ class Main {
 
 // Oggetto di configurazione dell'accopiatore
 class CouplerConfig {
-    public serial_a: String
+    public serial_a: string
     public baudrate_a: Number
-    public serial_b: String
+    public serial_b: string
     public baudrate_b: Number
 }
 
@@ -199,13 +199,17 @@ interface SerialPortLib {
 
 class SerialPort {
     serial: SerialPortLib
+    public buffer: Buffer
+    public bufferLock: boolean
+    private timeout: NodeJS.Timer
 
-    constructor(public name: String, public baudrate: Number) {
+    constructor(public name: string, public baudrate: Number, private delay: number = 5) {
         this.serial = new serialport(name, {
             baudRate: baudrate,
             autoOpen: false,
-            parser: serialport.parsers.byteDelimiter([13,10])
+            lock: false
         });
+        this.buffer = new Buffer('');
     }
 
     public open() {
@@ -226,6 +230,24 @@ class SerialPort {
     public write(buffer: Buffer) {
         this.serial.write(buffer);
     }
+
+    public logData(data: Buffer) {
+        if (this.bufferLock) {
+            clearTimeout(this.timeout);
+        } else {
+            this.bufferLock = true;
+        }
+        this.buffer = Buffer.concat([this.buffer, data]);        
+        this.timeout = setTimeout(this.timeoutHandler, this.delay);
+    }
+
+    private timeoutHandler = () => {
+        var time = new Date();
+        console.log(`\n${time.toISOString()} [${this.name}]:`);
+        hex(this.buffer);
+        this.buffer = new Buffer('');
+        this.bufferLock = false;
+    };
 }
 
 class Coupler {
@@ -251,10 +273,11 @@ class Coupler {
     private dumpAndRedirect(input: SerialPort, output: SerialPort): (data: string) => void {
         return (data: string) => {
             var buffer = new Buffer(data);
-            var time = new Date();
+            // var time = new Date();
             output.write(buffer);
-            console.log(`\n${time.toISOString()} [${input.name}]:`)
-            hex(buffer);
+            // console.log(`\n${time.toISOString()} [${input.name}]:`);
+            // hex(buffer);            
+            input.logData(buffer);
         }
     }
 
@@ -264,4 +287,4 @@ class Coupler {
 }
 
 let main = new Main();
-main.run(); 
+main.run();
