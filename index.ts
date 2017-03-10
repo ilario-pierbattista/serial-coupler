@@ -199,17 +199,57 @@ interface SerialPortLib {
 
 class SerialPort {
     serial: SerialPortLib
-    public buffer: Buffer
-    public bufferLock: boolean
-    private timeout: NodeJS.Timer
+    public logBuffer: Buffer
+    public writeBuffer: Buffer
+    public logBufferLock: boolean
+    public writeBufferLock: boolean
+    private logTimeout: NodeJS.Timer
+    private writeTimeout: NodeJS.Timer
 
-    constructor(public name: string, public baudrate: Number, private delay: number = 5) {
+    constructor(public name: string, public baudrate: Number, private writeDelay: number = 2, private logDelay: number = 5) {
         this.serial = new serialport(name, {
             baudRate: baudrate,
             autoOpen: false,
-            lock: false
+            parser: this.parser([0x0D, 0x0A])
         });
-        this.buffer = new Buffer('');
+        this.logBuffer = new Buffer('');
+        this.writeBuffer = new Buffer('');
+    }
+
+    private parser(delimiter: any) {
+        if (Object.prototype.toString.call(delimiter) !== '[object Array]') {
+            delimiter = [delimiter];
+        }
+        var buf = [];
+        var nextDelimIndex = 0;
+        var handshake_done = false;
+        var last_char = 0x00;
+        return function (emitter: NodeJS.EventEmitter, buffer: string) {
+            var d = new Buffer(buffer);
+            if(handshake_done) {
+                for (var i = 0; i < buffer.length; i++) {
+                    buf[buf.length] = buffer[i];
+                    if (buf[buf.length - 1] === delimiter[nextDelimIndex]) {
+                        nextDelimIndex++;
+                    }
+                    if (nextDelimIndex === delimiter.length) {
+                        emitter.emit('data', buf);
+                        buf = [];
+                        nextDelimIndex = 0;
+                    }
+                }
+            } else if(d.compare(new Buffer([0x1C]))) {
+                last_char = 0x1C;
+                emitter.emit('data', d);
+            } else if(d.compare(new Buffer([0x55]))) {
+                if(last_char == 0x1C) {
+                    handshake_done = true;
+                } else {
+                    last_char = 0x00;
+                }
+                emitter.emit('data', d);
+            }
+        };
     }
 
     public open() {
@@ -232,22 +272,42 @@ class SerialPort {
     }
 
     public logData(data: Buffer) {
-        if (this.bufferLock) {
-            clearTimeout(this.timeout);
+        if (this.logBufferLock) {
+            clearTimeout(this.logTimeout);
         } else {
-            this.bufferLock = true;
+            this.logBufferLock = true;
         }
-        this.buffer = Buffer.concat([this.buffer, data]);        
-        this.timeout = setTimeout(this.timeoutHandler, this.delay);
+        this.logBuffer = Buffer.concat([this.logBuffer, data]);
+        this.logTimeout = setTimeout(this.flushLog, this.logDelay);
     }
 
-    private timeoutHandler = () => {
+    public writeData(data: Buffer) {
+        if (this.writeBufferLock) {
+            clearTimeout(this.writeTimeout);
+        } else {
+            this.writeBuffer = Buffer.concat([this.writeBuffer, data]);
+            if (this.writeBuffer[this.writeBuffer.length - 1] == 0x0A &&
+                this.writeBuffer[this.writeBuffer.length - 2] == 0x0D) {
+                this.flushWrite();
+            } else {
+                this.writeTimeout = setTimeout(this.flushWrite, this.writeDelay);
+            }
+        }
+    }
+
+    private flushLog = () => {
         var time = new Date();
         console.log(`\n${time.toISOString()} [${this.name}]:`);
-        hex(this.buffer);
-        this.buffer = new Buffer('');
-        this.bufferLock = false;
+        hex(this.logBuffer);
+        this.logBuffer = new Buffer('');
+        this.logBufferLock = false;
     };
+
+    private flushWrite = () => {
+        this.write(this.writeBuffer);
+        this.writeBuffer = new Buffer('');
+        this.writeBufferLock = false;
+    }
 }
 
 class Coupler {
@@ -274,7 +334,7 @@ class Coupler {
         return (data: string) => {
             var buffer = new Buffer(data);
             // var time = new Date();
-            output.write(buffer);
+            output.writeData(buffer);
             // console.log(`\n${time.toISOString()} [${input.name}]:`);
             // hex(buffer);            
             input.logData(buffer);
