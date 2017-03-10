@@ -1,54 +1,10 @@
-var serialport = require('serialport');
-var inquirer = require('inquirer');
-var cliArgs = require('command-line-args');
-var getUsage = require('command-line-usage');
+"use strict";
+var serialport = require("serialport");
+var inquirer = require("inquirer");
+var cliArgs = require("command-line-args");
+var getUsage = require("command-line-usage");
+var serialport_1 = require("./src/serialport");
 var hex = require('hex');
-var cliOptsDefs = [
-    { name: 'serial_a', alias: 'a', type: String },
-    { name: 'serial_b', alias: 'b', type: String },
-    { name: 'baudrate_a', type: Number },
-    { name: 'baudrate_b', type: Number },
-    { name: 'baudrate', alias: 'r', type: Number },
-    { name: 'help', alias: 'h', type: Boolean }
-];
-var usageSections = [
-    {
-        header: 'A serial coupler',
-        content: 'It couples [two] serial devices {together}, providing a simple and useful debugging tool.'
-    },
-    {
-        header: 'Options',
-        optionList: [
-            {
-                name: 'serial-a',
-                alias: 'a',
-                typeLabel: '[underline]{file}',
-                description: 'The first serial port.'
-            }, {
-                name: 'serial-b',
-                alias: 'b',
-                typeLabel: '[underline]{file}',
-                description: 'The second serial port.'
-            }, {
-                name: 'baudrate-a',
-                typeLabel: '[underline]{baudrate}',
-                description: 'Baudrate for first serial.'
-            }, {
-                name: 'baudrate-b',
-                typeLabel: '[underline]{baudrate}',
-                description: 'Baudrate for second serial.'
-            }, {
-                name: 'baudrate',
-                alias: 'r',
-                typeLabel: '[underline]{baudrate}',
-                description: 'Baudrate for both serial ports.'
-            }, {
-                name: 'help',
-                description: 'Print this usage guide.'
-            }
-        ]
-    }
-];
 var Main = (function () {
     function Main() {
         this.options = cliArgs(cliOptsDefs);
@@ -99,13 +55,12 @@ var Main = (function () {
         return new Promise(function (resolve, reject) {
             var readyConfig = ans;
             if (!Coupler.isConfigValid(ans)) {
-                var config = {
+                readyConfig = {
                     serial_a: ans['serial_a'],
                     baudrate_a: Number(ans['baudrate_a']),
                     serial_b: ans['serial_b'],
                     baudrate_b: Number(ans['baudrate_b'])
                 };
-                readyConfig = config;
             }
             try {
                 return resolve(new Coupler(readyConfig));
@@ -134,7 +89,7 @@ var Main = (function () {
                         type: 'rawlist',
                         name: 'serial_a',
                         message: 'First serial port',
-                        choices: serialPortsChoices
+                        choices: serialPortsChoices,
                     }, {
                         type: 'rawlist',
                         name: 'baudrate_a',
@@ -171,130 +126,17 @@ var Main = (function () {
         configurable: true
     });
     return Main;
-})();
+}());
 // Oggetto di configurazione dell'accopiatore
 var CouplerConfig = (function () {
     function CouplerConfig() {
     }
     return CouplerConfig;
-})();
-var SerialPort = (function () {
-    function SerialPort(name, baudrate, writeDelay, logDelay) {
-        var _this = this;
-        if (writeDelay === void 0) { writeDelay = 2; }
-        if (logDelay === void 0) { logDelay = 5; }
-        this.name = name;
-        this.baudrate = baudrate;
-        this.writeDelay = writeDelay;
-        this.logDelay = logDelay;
-        this.flushLog = function () {
-            var time = new Date();
-            console.log("\n" + time.toISOString() + " [" + _this.name + "]:");
-            hex(_this.logBuffer);
-            _this.logBuffer = new Buffer('');
-            _this.logBufferLock = false;
-        };
-        this.flushWrite = function () {
-            _this.write(_this.writeBuffer);
-            _this.writeBuffer = new Buffer('');
-            _this.writeBufferLock = false;
-        };
-        this.serial = new serialport(name, {
-            baudRate: baudrate,
-            autoOpen: false,
-            parser: this.parser([0x0D, 0x0A])
-        });
-        this.logBuffer = new Buffer('');
-        this.writeBuffer = new Buffer('');
-    }
-    SerialPort.prototype.parser = function (delimiter) {
-        if (Object.prototype.toString.call(delimiter) !== '[object Array]') {
-            delimiter = [delimiter];
-        }
-        var buf = [];
-        var nextDelimIndex = 0;
-        var handshake_done = false;
-        var last_char = 0x00;
-        return function (emitter, buffer) {
-            var d = new Buffer(buffer);
-            if (handshake_done) {
-                for (var i = 0; i < buffer.length; i++) {
-                    buf[buf.length] = buffer[i];
-                    if (buf[buf.length - 1] === delimiter[nextDelimIndex]) {
-                        nextDelimIndex++;
-                    }
-                    if (nextDelimIndex === delimiter.length) {
-                        emitter.emit('data', buf);
-                        buf = [];
-                        nextDelimIndex = 0;
-                    }
-                }
-            }
-            else if (d.compare(new Buffer([0x1C]))) {
-                last_char = 0x1C;
-                emitter.emit('data', d);
-            }
-            else if (d.compare(new Buffer([0x55]))) {
-                if (last_char == 0x1C) {
-                    handshake_done = true;
-                }
-                else {
-                    last_char = 0x00;
-                }
-                emitter.emit('data', d);
-            }
-        };
-    };
-    SerialPort.prototype.open = function () {
-        var _this = this;
-        this.serial.open(function (err) {
-            if (err)
-                console.log("Error: " + err.message);
-        });
-        this.serial.on('open', function () {
-            _this.serial.flush(function (err) {
-                if (err)
-                    console.log("Error: " + err.message);
-            });
-        });
-    };
-    SerialPort.prototype.onData = function (callback) {
-        this.serial.on('data', callback);
-    };
-    SerialPort.prototype.write = function (buffer) {
-        this.serial.write(buffer);
-    };
-    SerialPort.prototype.logData = function (data) {
-        if (this.logBufferLock) {
-            clearTimeout(this.logTimeout);
-        }
-        else {
-            this.logBufferLock = true;
-        }
-        this.logBuffer = Buffer.concat([this.logBuffer, data]);
-        this.logTimeout = setTimeout(this.flushLog, this.logDelay);
-    };
-    SerialPort.prototype.writeData = function (data) {
-        if (this.writeBufferLock) {
-            clearTimeout(this.writeTimeout);
-        }
-        else {
-            this.writeBuffer = Buffer.concat([this.writeBuffer, data]);
-            if (this.writeBuffer[this.writeBuffer.length - 1] == 0x0A &&
-                this.writeBuffer[this.writeBuffer.length - 2] == 0x0D) {
-                this.flushWrite();
-            }
-            else {
-                this.writeTimeout = setTimeout(this.flushWrite, this.writeDelay);
-            }
-        }
-    };
-    return SerialPort;
-})();
+}());
 var Coupler = (function () {
     function Coupler(config) {
-        this.serialA = new SerialPort(config.serial_a, config.baudrate_a);
-        this.serialB = new SerialPort(config.serial_b, config.baudrate_b);
+        this.serialA = new serialport_1.SerialPort(config.serial_a, config.baudrate_a);
+        this.serialB = new serialport_1.SerialPort(config.serial_b, config.baudrate_b);
     }
     Coupler.prototype.begin = function () {
         var serialA = this.serialA;
@@ -318,6 +160,6 @@ var Coupler = (function () {
         return config.baudrate_a !== undefined;
     };
     return Coupler;
-})();
+}());
 var main = new Main();
 main.run();
